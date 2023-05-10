@@ -138,7 +138,7 @@ impl TextureReader {
         let desc = tex.desc();
 
         match desc.format {
-            ColorFormat::ABGR8UNorm | ColorFormat::ARGB8UNorm | ColorFormat::AYUV => {
+            ColorFormat::BGRA8UNorm | ColorFormat::ARGB8UNorm | ColorFormat::AYUV => {
                 let total_size = desc.width * desc.height * 4;
                 vec.resize(total_size as usize, 0);
                 for i in 0..desc.height {
