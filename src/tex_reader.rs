@@ -77,7 +77,7 @@ mod test {
     }
 }
 
-use std::ptr::{copy, null};
+use std::ptr::copy;
 use windows::Win32::Graphics::Direct3D11::{D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_USAGE_STAGING, ID3D11Device4, ID3D11DeviceContext4};
 use crate::texture::{ColorFormat, Texture};
 use crate::{DDApiError, Result};
@@ -129,11 +129,11 @@ impl TextureReader {
         unsafe { self.ctx.CopyResource(self.tex.as_mut().unwrap().as_raw_ref(), tex.as_raw_ref()); }
         unsafe { self.ctx.Flush() }
         let raw_tex = self.tex.as_mut().unwrap().as_raw_ref();
-        let sub_res = unsafe { self.ctx.Map(raw_tex, 0, D3D11_MAP_READ, 0) };
-        if sub_res.is_err() {
-            return Err(DDApiError::Unexpected(format!("failed to map to cpu {:?}", sub_res)));
+        let mut sub_res = D3D11_MAPPED_SUBRESOURCE::default();
+        let result = unsafe { self.ctx.Map(raw_tex, 0, D3D11_MAP_READ, 0, Some(&mut sub_res)) };
+        if result.is_err() {
+            return Err(DDApiError::Unexpected(format!("failed to map to cpu {:?}", result)));
         }
-        let sub_res: D3D11_MAPPED_SUBRESOURCE = sub_res.unwrap();
 
         let desc = tex.desc();
 
@@ -177,8 +177,9 @@ impl TextureReader {
             desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
             desc.MiscFlags = Default::default();
 
-            let new_tex = unsafe { self.device.CreateTexture2D(&desc, null()) };
-            if new_tex.is_err() {
+            let mut new_tex = None;
+            let result = unsafe { self.device.CreateTexture2D(&desc, None, Some(&mut new_tex)) };
+            if result.is_err() {
                 return Err(DDApiError::Unexpected(format!("failed to create texture. {:?}", new_tex)));
             }
             self.tex = Some(Texture::new(new_tex.unwrap()))

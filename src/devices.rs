@@ -1,7 +1,7 @@
 //! This module contains [adapter (GPU)][Adapter] and [adapter factories][AdapterFactory] to acquire adapters.
 //! The adapters can be used to enumerate various outputs connected to them.
 
-use windows::core::{Interface, Result as WinResult};
+use windows::core::{Result as WinResult, ComInterface};
 use windows::Win32::Foundation::LUID;
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory2, DXGI_ADAPTER_DESC3, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IDXGIAdapter4, IDXGIFactory6};
 
@@ -48,13 +48,15 @@ unsafe impl Sync for Adapter {}
 impl Adapter {
     /// Returns name of the adapter
     pub fn name(&self) -> String {
-        let desc: DXGI_ADAPTER_DESC3 = unsafe { self.0.GetDesc3().unwrap() };
+        let mut desc = DXGI_ADAPTER_DESC3::default();
+        unsafe { self.0.GetDesc3(&mut desc) }.unwrap();
         convert_u16_to_string(&desc.Description)
     }
 
     /// returns LUID of the Adapter.
     pub fn luid(&self) -> LUID {
-        let desc: DXGI_ADAPTER_DESC3 = unsafe { self.0.GetDesc3().unwrap() };
+        let mut desc = DXGI_ADAPTER_DESC3::default();
+        unsafe { self.0.GetDesc3(&mut desc) }.unwrap();
         desc.AdapterLuid
     }
 

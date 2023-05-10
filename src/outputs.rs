@@ -98,16 +98,15 @@ use std::cmp::max;
 use std::ffi::{CString};
 use std::mem::{size_of, swap};
 use std::pin::Pin;
-use std::ptr::{null, null_mut};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::task::{Context, Poll, Waker};
 use std::thread::{spawn};
 use futures::Stream;
 use log::{error, trace};
 use windows::Win32::Graphics::Dxgi::{DXGI_MODE_DESC1, DXGI_OUTPUT_DESC1, IDXGIOutput6};
-use windows::core::{PCSTR, Result as WinResult};
+use windows::core::PCSTR;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM};
-use windows::Win32::Graphics::Gdi::{CDS_TYPE, ChangeDisplaySettingsExA, DEVMODEA, DISP_CHANGE_SUCCESSFUL, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_DISPLAYORIENTATION, DM_PELSHEIGHT, DM_PELSWIDTH, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsExA};
+use windows::Win32::Graphics::Gdi::{CDS_TYPE, ChangeDisplaySettingsExA, DEVMODEA, DISP_CHANGE_SUCCESSFUL, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_DISPLAYORIENTATION, DM_PELSHEIGHT, DM_PELSWIDTH, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsExA, DEVMODE_DISPLAY_ORIENTATION, DMDO_180, DMDO_90, DMDO_270, DMDO_DEFAULT, ENUM_DISPLAY_SETTINGS_FLAGS};
 use crate::errors::DDApiError;
 use crate::utils::convert_u16_to_string;
 
@@ -128,9 +127,9 @@ impl Display {
 
     /// returns name of this monitor
     pub fn name(&self) -> String {
-        let desc: WinResult<DXGI_OUTPUT_DESC1> = unsafe { self.0.GetDesc1() };
-        let desc = desc.unwrap();
-        convert_u16_to_string(&desc.DeviceName)
+        let mut out_desc = DXGI_OUTPUT_DESC1::default();
+        unsafe { self.0.GetDesc1(&mut out_desc) }.unwrap();
+        convert_u16_to_string(&out_desc.DeviceName)
     }
 
     /// get supported display modes
@@ -164,9 +163,9 @@ impl Display {
         display_mode.dmDisplayFrequency = mode.refresh_num / mode.refresh_den;
         display_mode.Anonymous1.Anonymous2.dmDisplayOrientation = mode.orientation.into();
 
-        display_mode.dmFields |= (DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY | DM_BITSPERPEL | DM_DISPLAYORIENTATION) as u32;
+        display_mode.dmFields |= DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY | DM_BITSPERPEL | DM_DISPLAYORIENTATION;
 
-        let resp = unsafe { ChangeDisplaySettingsExA(PCSTR(name.as_ptr() as _), &display_mode, None, CDS_TYPE(0), null()) };
+        let resp = unsafe { ChangeDisplaySettingsExA(PCSTR(name.as_ptr() as _), Some(&display_mode), None, CDS_TYPE(0), None) };
 
         if resp != DISP_CHANGE_SUCCESSFUL {
             Err(DDApiError::BadParam(format!("failed to change display settings. DISP_CHANGE={}", resp.0)))
@@ -185,7 +184,7 @@ impl Display {
             dmDriverExtra: 0,
             ..Default::default()
         };
-        let success = unsafe { EnumDisplaySettingsExA(PCSTR(name.as_c_str().as_ptr() as _), ENUM_CURRENT_SETTINGS, &mut mode, 0) };
+        let success = unsafe { EnumDisplaySettingsExA(PCSTR(name.as_c_str().as_ptr() as _), ENUM_CURRENT_SETTINGS, &mut mode, ENUM_DISPLAY_SETTINGS_FLAGS::default()) };
         if !success.as_bool() {
             Err(DDApiError::Unexpected("Failed to retrieve display settings for output".to_string()))
         } else {
@@ -228,12 +227,12 @@ impl Display {
     // internal function
     fn fill_modes(&self, format: DXGI_FORMAT, hdr: bool, mode_list: &mut Vec<DisplayMode>) -> Result<(), DDApiError> {
         let mut num_modes: u32 = 0;
-        if let Err(e) = unsafe { self.0.GetDisplayModeList1(format, 0, &mut num_modes, null_mut()) } {
+        if let Err(e) = unsafe { self.0.GetDisplayModeList1(format, 0, &mut num_modes, None) } {
             return Err(DDApiError::Unexpected(format!("{:?}", e)));
         }
 
         let mut modes: Vec<DXGI_MODE_DESC1> = Vec::with_capacity(num_modes as _);
-        if let Err(e) = unsafe { self.0.GetDisplayModeList1(format, 0, &mut num_modes, modes.as_mut_ptr()) } {
+        if let Err(e) = unsafe { self.0.GetDisplayModeList1(format, 0, &mut num_modes, Some(modes.as_mut_ptr())) } {
             return Err(DDApiError::Unexpected(format!("{:?}", e)));
         }
 
@@ -277,24 +276,24 @@ pub enum DisplayOrientation {
     Rotate270,
 }
 
-impl From<u32> for DisplayOrientation {
-    fn from(i: u32) -> Self {
+impl From<DEVMODE_DISPLAY_ORIENTATION> for DisplayOrientation {
+    fn from(i: DEVMODE_DISPLAY_ORIENTATION) -> Self {
         match i {
-            1 => Self::Rotate90,
-            2 => Self::Rotate180,
-            3 => Self::Rotate270,
+            DMDO_90 => Self::Rotate90,
+            DMDO_180 => Self::Rotate180,
+            DMDO_270 => Self::Rotate270,
             _ => Self::NoRotation,
         }
     }
 }
 
-impl From<DisplayOrientation> for u32 {
+impl From<DisplayOrientation> for DEVMODE_DISPLAY_ORIENTATION {
     fn from(i: DisplayOrientation) -> Self {
         match i {
-            DisplayOrientation::NoRotation => { 0 }
-            DisplayOrientation::Rotate90 => { 1 }
-            DisplayOrientation::Rotate180 => { 2 }
-            DisplayOrientation::Rotate270 => { 3 }
+            DisplayOrientation::NoRotation => { DMDO_DEFAULT }
+            DisplayOrientation::Rotate90 => { DMDO_90 }
+            DisplayOrientation::Rotate180 => { DMDO_180 }
+            DisplayOrientation::Rotate270 => { DMDO_270 }
         }
     }
 }

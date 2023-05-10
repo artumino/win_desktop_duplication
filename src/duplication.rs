@@ -136,21 +136,18 @@ mod test {
 
 
 use std::mem::{size_of};
-use std::ptr::null;
 use std::time::Duration;
 use futures::{StreamExt};
 use log::{debug, error, trace, warn};
 use windows::Win32::Graphics::Direct3D11::{D3D11_BIND_FLAG, D3D11_BIND_RENDER_TARGET, D3D11_CREATE_DEVICE_FLAG, D3D11_RESOURCE_MISC_FLAG, D3D11_RESOURCE_MISC_GDI_COMPATIBLE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE, D3D11_USAGE_DEFAULT, D3D11CreateDevice, ID3D11Device4, ID3D11DeviceContext4};
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL, D3D_FEATURE_LEVEL_11_1};
 use windows::Win32::Graphics::Dxgi::{DXGI_ERROR_UNSUPPORTED, DXGI_ERROR_SESSION_DISCONNECTED, IDXGIDevice4, IDXGIOutputDuplication, DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_ACCESS_DENIED, DXGI_ERROR_INVALID_CALL, IDXGISurface1, DXGI_ERROR_WAIT_TIMEOUT, IDXGIResource};
-use windows::core::Interface;
-use windows::core::Result as WinResult;
+use windows::core::{Result as WinResult, ComInterface};
 use windows::Win32::Foundation::{E_INVALIDARG, E_ACCESSDENIED, POINT, GetLastError, BOOL};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Gdi::DeleteObject;
-use windows::Win32::System::StationsAndDesktops::{OpenInputDesktop, SetThreadDesktop};
-use windows::Win32::System::SystemServices::GENERIC_READ;
-use windows::Win32::UI::WindowsAndMessaging::{CURSOR_SHOWING, CURSORINFO, DF_ALLOWOTHERACCOUNTHOOK, DI_NORMAL, DrawIconEx, GetCursorInfo, GetIconInfo, HCURSOR};
+use windows::Win32::System::StationsAndDesktops::{OpenInputDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK, DESKTOP_READ_CONTROL};
+use windows::Win32::UI::WindowsAndMessaging::{CURSOR_SHOWING, CURSORINFO, DI_NORMAL, DrawIconEx, GetCursorInfo, GetIconInfo, HCURSOR};
 use crate::devices::Adapter;
 use crate::errors::DDApiError;
 use crate::outputs::{Display, DisplayVSyncStream};
@@ -285,9 +282,9 @@ impl DesktopDuplicationApi {
         let resp = unsafe {
             D3D11CreateDevice(adapter.as_raw_ref(), D3D_DRIVER_TYPE_UNKNOWN,
                               None, D3D11_CREATE_DEVICE_FLAG(0),
-                              &feature_levels, D3D11_SDK_VERSION,
-                              &mut d3d_device, &mut feature_level,
-                              &mut d3d_ctx)
+                              Some(&feature_levels), D3D11_SDK_VERSION,
+                              Some(&mut d3d_device), Some(&mut feature_level),
+                              Some(&mut d3d_ctx))
         };
         if resp.is_err() {
             Err(DDApiError::Unexpected(format!("faild d3d11 create device. {:?}", resp)))
@@ -458,7 +455,7 @@ impl DesktopDuplicationApi {
             unsafe { return Err(DDApiError::Unexpected(format!("failed to draw icon. {:?}", GetLastError()))); }
         }
 
-        let _ = unsafe { surface.ReleaseDC(null()) };
+        let _ = unsafe { surface.ReleaseDC(None) };
         Ok(())
     }
 
@@ -541,17 +538,19 @@ impl DesktopDuplicationApi {
             CPUAccessFlags: Default::default(),
             MiscFlags: misc_flag,
         };
-        let result = unsafe { self.d3d_device.CreateTexture2D(&desc, null()) };
+        
+        let mut d3d_texture = None;
+        let result = unsafe { self.d3d_device.CreateTexture2D(&desc, None, Some(&mut d3d_texture)) };
         if let Err(e) = result {
             Err(DDApiError::Unexpected(format!("failed to create texture. {:?}", e)))
         } else {
-            Ok(Texture::new(result.unwrap()))
+            Ok(Texture::new(d3d_texture.unwrap()))
         }
     }
 
     fn switch_thread_desktop() -> Result<()> {
         debug!("trying to switch Thread desktop");
-        let desk = unsafe { OpenInputDesktop(DF_ALLOWOTHERACCOUNTHOOK as _, true, GENERIC_READ) };
+        let desk = unsafe { OpenInputDesktop(DF_ALLOWOTHERACCOUNTHOOK as _, true, DESKTOP_READ_CONTROL) };
         if let Err(err) = desk {
             error!("dint get desktop : {:?}", err);
             return Err(DDApiError::AccessDenied);
