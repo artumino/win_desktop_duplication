@@ -87,8 +87,8 @@ pub enum ColorFormat {
     /// Packed 8bit per pixel ARGB unsigned normalized int format
     ARGB8UNorm,
 
-    /// Packed 8bit per pixel ABGR unsigned normalized int format
-    ABGR8UNorm,
+    /// Packed 8bit per pixel BGRA unsigned normalized int format
+    BGRA8UNorm,
 
     /// planar 8bit per pixel YUV 4:4:4 format
     YUV444,
@@ -161,7 +161,7 @@ mod gen {
 generate_map!(DXGI_FORMAT ColorFormat {
     (DXGI_FORMAT_R8G8B8A8_UNORM, ColorFormat::ARGB8UNorm),
 
-    (DXGI_FORMAT_B8G8R8A8_UNORM, ColorFormat::ABGR8UNorm),
+    (DXGI_FORMAT_B8G8R8A8_UNORM, ColorFormat::BGRA8UNorm),
 
     (DXGI_FORMAT_AYUV, ColorFormat::AYUV),
 
