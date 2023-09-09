@@ -2,7 +2,11 @@
 
 use std::sync::{Arc, RwLock};
 use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_AYUV, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_FORMAT_P010, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_Y410};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT, DXGI_FORMAT_AYUV, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_FORMAT_P010,
+    DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16_UNORM,
+    DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_Y410,
+};
 
 /// Convenient wrapper over ID3D11Texture2D interface to retrieve dimensions, pixel format, read
 /// pixels to system memory or store texture as an image.
@@ -31,20 +35,25 @@ impl Texture {
             }
         }
         let mut desc = Default::default();
-        unsafe { self.tex.GetDesc(&mut desc); }
+        unsafe {
+            self.tex.GetDesc(&mut desc);
+        }
         let mut tex_desc = TextureDesc {
             height: desc.Height,
             width: desc.Width,
             format: ColorFormat::from(desc.Format),
         };
-        if matches!(tex_desc.format, ColorFormat::YUV444|ColorFormat::YUV444_10bit) {
-            tex_desc.height = tex_desc.height / 3;
+        if matches!(
+            tex_desc.format,
+            ColorFormat::YUV444 | ColorFormat::YUV444_10bit
+        ) {
+            tex_desc.height /= 3;
         }
 
         let mut desc_wr = self.desc.write().unwrap();
 
         (*desc_wr) = Some(tex_desc);
-        return desc_wr.unwrap();
+        desc_wr.unwrap()
     }
 
     /// get reference of internal texture instance
@@ -61,7 +70,6 @@ pub struct TextureDesc {
     pub width: u32,
     pub format: ColorFormat,
 }
-
 
 /// enumeration of color formats. this is mainly used to convert color formats
 /// from different libraries into a common format.

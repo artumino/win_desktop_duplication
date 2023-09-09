@@ -1,9 +1,12 @@
 //! This module contains [adapter (GPU)][Adapter] and [adapter factories][AdapterFactory] to acquire adapters.
 //! The adapters can be used to enumerate various outputs connected to them.
 
-use windows::core::{Result as WinResult, ComInterface};
+use windows::core::{ComInterface, Result as WinResult};
 use windows::Win32::Foundation::LUID;
-use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory2, DXGI_ADAPTER_DESC3, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IDXGIAdapter4, IDXGIFactory6};
+use windows::Win32::Graphics::Dxgi::{
+    CreateDXGIFactory2, IDXGIAdapter4, IDXGIFactory6, DXGI_ADAPTER_DESC3,
+    DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+};
 
 use crate::outputs::Display;
 use crate::utils::convert_u16_to_string;
@@ -79,7 +82,7 @@ impl Adapter {
 
     /// returns a specific display by index. if the item doesn't exist, returns `None`.
     pub fn get_display_by_idx(&self, idx: u32) -> Option<Display> {
-        DisplayIterator::get_display_by_idx(&self, idx)
+        DisplayIterator::get_display_by_idx(self, idx)
     }
 }
 
@@ -105,17 +108,13 @@ pub struct DisplayIterator {
 
 impl DisplayIterator {
     fn new(adapter: Adapter) -> Self {
-        Self {
-            adapter,
-            idx: 0,
-        }
+        Self { adapter, idx: 0 }
     }
     fn get_display_by_idx(adapter: &Adapter, idx: u32) -> Option<Display> {
-        let output = unsafe { adapter.0.EnumOutputs(idx) };
-        if output.is_err() {
-            None
+        if let Ok(output) = unsafe { adapter.0.EnumOutputs(idx) } {
+            Some(Display::new(output.cast().unwrap()))
         } else {
-            Some(Display::new(output.unwrap().cast().unwrap()))
+            None
         }
     }
 }
@@ -188,9 +187,12 @@ impl AdapterFactory {
 
     /// retrieve an adapter by index
     pub fn get_adapter_by_idx(&self, idx: u32) -> Option<Adapter> {
-        let adapter: WinResult<IDXGIAdapter4> = unsafe { self.fac.EnumAdapterByGpuPreference(idx, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE) };
-        if adapter.is_ok() {
-            Some(Adapter(adapter.unwrap().cast().unwrap()))
+        let result: WinResult<IDXGIAdapter4> = unsafe {
+            self.fac
+                .EnumAdapterByGpuPreference(idx, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE)
+        };
+        if let Ok(adapter) = result {
+            Some(Adapter(adapter.cast().unwrap()))
         } else {
             None
         }
@@ -198,9 +200,8 @@ impl AdapterFactory {
 
     /// retrieve an adapter by LUID
     pub fn get_adapter_by_luid(&self, luid: LUID) -> Option<Adapter> {
-        let adapter = unsafe { self.fac.EnumAdapterByLuid(luid) };
-        if adapter.is_ok() {
-            Some(Adapter(adapter.unwrap()))
+        if let Ok(adapter) = unsafe { self.fac.EnumAdapterByLuid(luid) } {
+            Some(Adapter(adapter))
         } else {
             None
         }

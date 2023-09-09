@@ -5,15 +5,15 @@
 //!                          display vsync event.
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicI32, Ordering};
-    use std::thread::sleep;
-    use std::time::Duration;
-    use futures::StreamExt;
-    use tokio::runtime::Builder;
-    use tokio::time;
     use crate::devices::AdapterFactory;
     use crate::outputs::{DisplayMode, DisplayOrientation};
+    use futures::StreamExt;
+    use std::sync::atomic::{AtomicI32, Ordering};
+    use std::sync::Arc;
+    use std::thread::sleep;
+    use std::time::Duration;
+    use tokio::runtime::Builder;
+    use tokio::time;
 
     #[test]
     fn test_display_names() {
@@ -27,7 +27,11 @@ mod test {
 
     #[test]
     fn test_display_modes() {
-        for display in AdapterFactory::new().get_adapter_by_idx(0).unwrap().iter_displays() {
+        for display in AdapterFactory::new()
+            .get_adapter_by_idx(0)
+            .unwrap()
+            .iter_displays()
+        {
             println!("{}", display.name());
             println!("{:?}", display.get_display_modes().unwrap());
         }
@@ -35,7 +39,11 @@ mod test {
 
     #[test]
     fn test_display_setting_change() {
-        let disp = AdapterFactory::new().get_adapter_by_idx(0).unwrap().get_display_by_idx(0).unwrap();
+        let disp = AdapterFactory::new()
+            .get_adapter_by_idx(0)
+            .unwrap()
+            .get_display_by_idx(0)
+            .unwrap();
         let curr_settings = disp.get_current_display_mode().unwrap();
 
         let mode = DisplayMode {
@@ -55,15 +63,22 @@ mod test {
 
     #[test]
     fn test_get_display_mode() {
-        let disp = AdapterFactory::new().get_adapter_by_idx(0).unwrap().get_display_by_idx(0).unwrap();
+        let disp = AdapterFactory::new()
+            .get_adapter_by_idx(0)
+            .unwrap()
+            .get_display_by_idx(0)
+            .unwrap();
         let curr_settings = disp.get_current_display_mode().unwrap();
         println!("{:?}", curr_settings);
     }
 
-
     #[test]
     fn test_display_sync_stream() {
-        let disp = AdapterFactory::new().get_adapter_by_idx(0).unwrap().get_display_by_idx(0).unwrap();
+        let disp = AdapterFactory::new()
+            .get_adapter_by_idx(0)
+            .unwrap()
+            .get_display_by_idx(0)
+            .unwrap();
         let rt = Builder::new_current_thread().enable_time().build().unwrap();
         let counter = Arc::new(AtomicI32::new(0));
         let counter2 = counter.clone();
@@ -93,23 +108,28 @@ mod test {
     }
 }
 
-
+use crate::errors::DDApiError;
+use crate::utils::convert_u16_to_string;
+use futures::Stream;
+use log::{error, trace};
 use std::cmp::max;
-use std::ffi::{CString};
+use std::ffi::CString;
 use std::mem::{size_of, swap};
 use std::pin::Pin;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::task::{Context, Poll, Waker};
-use std::thread::{spawn};
-use futures::Stream;
-use log::{error, trace};
-use windows::Win32::Graphics::Dxgi::{DXGI_MODE_DESC1, DXGI_OUTPUT_DESC1, IDXGIOutput6};
+use std::thread::spawn;
 use windows::core::PCSTR;
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM};
-use windows::Win32::Graphics::Gdi::{CDS_TYPE, ChangeDisplaySettingsExA, DEVMODEA, DISP_CHANGE_SUCCESSFUL, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_DISPLAYORIENTATION, DM_PELSHEIGHT, DM_PELSWIDTH, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsExA, DEVMODE_DISPLAY_ORIENTATION, DMDO_180, DMDO_90, DMDO_270, DMDO_DEFAULT, ENUM_DISPLAY_SETTINGS_FLAGS};
-use crate::errors::DDApiError;
-use crate::utils::convert_u16_to_string;
-
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM,
+};
+use windows::Win32::Graphics::Dxgi::{IDXGIOutput6, DXGI_MODE_DESC1, DXGI_OUTPUT_DESC1};
+use windows::Win32::Graphics::Gdi::{
+    ChangeDisplaySettingsExA, EnumDisplaySettingsExA, CDS_TYPE, DEVMODEA,
+    DEVMODE_DISPLAY_ORIENTATION, DISP_CHANGE_SUCCESSFUL, DMDO_180, DMDO_270, DMDO_90, DMDO_DEFAULT,
+    DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_DISPLAYORIENTATION, DM_PELSHEIGHT, DM_PELSWIDTH,
+    ENUM_CURRENT_SETTINGS, ENUM_DISPLAY_SETTINGS_FLAGS,
+};
 
 /// Display represents a monitor connected to a single [Adapter][crate::devices::Adapter] (GPU). this instance is
 /// used to create a output duplication instance, change display mode and few other options.
@@ -163,12 +183,27 @@ impl Display {
         display_mode.dmDisplayFrequency = mode.refresh_num / mode.refresh_den;
         display_mode.Anonymous1.Anonymous2.dmDisplayOrientation = mode.orientation.into();
 
-        display_mode.dmFields |= DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY | DM_BITSPERPEL | DM_DISPLAYORIENTATION;
+        display_mode.dmFields |= DM_PELSWIDTH
+            | DM_PELSHEIGHT
+            | DM_DISPLAYFREQUENCY
+            | DM_BITSPERPEL
+            | DM_DISPLAYORIENTATION;
 
-        let resp = unsafe { ChangeDisplaySettingsExA(PCSTR(name.as_ptr() as _), Some(&display_mode), None, CDS_TYPE(0), None) };
+        let resp = unsafe {
+            ChangeDisplaySettingsExA(
+                PCSTR(name.as_ptr() as _),
+                Some(&display_mode),
+                None,
+                CDS_TYPE(0),
+                None,
+            )
+        };
 
         if resp != DISP_CHANGE_SUCCESSFUL {
-            Err(DDApiError::BadParam(format!("failed to change display settings. DISP_CHANGE={}", resp.0)))
+            Err(DDApiError::BadParam(format!(
+                "failed to change display settings. DISP_CHANGE={}",
+                resp.0
+            )))
         } else {
             Ok(())
         }
@@ -184,9 +219,18 @@ impl Display {
             dmDriverExtra: 0,
             ..Default::default()
         };
-        let success = unsafe { EnumDisplaySettingsExA(PCSTR(name.as_c_str().as_ptr() as _), ENUM_CURRENT_SETTINGS, &mut mode, ENUM_DISPLAY_SETTINGS_FLAGS::default()) };
+        let success = unsafe {
+            EnumDisplaySettingsExA(
+                PCSTR(name.as_c_str().as_ptr() as _),
+                ENUM_CURRENT_SETTINGS,
+                &mut mode,
+                ENUM_DISPLAY_SETTINGS_FLAGS::default(),
+            )
+        };
         if !success.as_bool() {
-            Err(DDApiError::Unexpected("Failed to retrieve display settings for output".to_string()))
+            Err(DDApiError::Unexpected(
+                "Failed to retrieve display settings for output".to_string(),
+            ))
         } else {
             let mut dm = DisplayMode {
                 width: mode.dmPelsWidth,
@@ -196,7 +240,10 @@ impl Display {
                 refresh_den: 1,
                 hdr: mode.dmBitsPerPel != 32,
             };
-            if matches!(dm.orientation,DisplayOrientation::Rotate90|DisplayOrientation::Rotate270) {
+            if matches!(
+                dm.orientation,
+                DisplayOrientation::Rotate90 | DisplayOrientation::Rotate270
+            ) {
                 dm.height = mode.dmPelsWidth;
                 dm.width = mode.dmPelsHeight;
             }
@@ -213,7 +260,10 @@ impl Display {
     pub fn wait_for_vsync(&self) -> Result<(), DDApiError> {
         let err = unsafe { self.0.WaitForVBlank() };
         if err.is_err() {
-            return Err(DDApiError::Unexpected(format!("DisplaySyncStream received a sync error. Maybe monitor disconnected? {:?}", err)));
+            Err(DDApiError::Unexpected(format!(
+                "DisplaySyncStream received a sync error. Maybe monitor disconnected? {:?}",
+                err
+            )))
         } else {
             Ok(())
         }
@@ -225,19 +275,30 @@ impl Display {
     }
 
     // internal function
-    fn fill_modes(&self, format: DXGI_FORMAT, hdr: bool, mode_list: &mut Vec<DisplayMode>) -> Result<(), DDApiError> {
+    fn fill_modes(
+        &self,
+        format: DXGI_FORMAT,
+        hdr: bool,
+        mode_list: &mut Vec<DisplayMode>,
+    ) -> Result<(), DDApiError> {
         let mut num_modes: u32 = 0;
         if let Err(e) = unsafe { self.0.GetDisplayModeList1(format, 0, &mut num_modes, None) } {
             return Err(DDApiError::Unexpected(format!("{:?}", e)));
         }
 
         let mut modes: Vec<DXGI_MODE_DESC1> = Vec::with_capacity(num_modes as _);
-        if let Err(e) = unsafe { self.0.GetDisplayModeList1(format, 0, &mut num_modes, Some(modes.as_mut_ptr())) } {
+        if let Err(e) = unsafe {
+            self.0
+                .GetDisplayModeList1(format, 0, &mut num_modes, Some(modes.as_mut_ptr()))
+        } {
             return Err(DDApiError::Unexpected(format!("{:?}", e)));
         }
 
         unsafe { modes.set_len(num_modes as _) };
-        let reserve = max(0, num_modes as usize - mode_list.capacity() + mode_list.len());
+        let reserve = max(
+            0,
+            num_modes as usize - mode_list.capacity() + mode_list.len(),
+        );
         mode_list.reserve(reserve);
         for mode in modes.iter() {
             mode_list.push(DisplayMode {
@@ -256,7 +317,6 @@ impl Display {
 unsafe impl Send for Display {}
 
 unsafe impl Sync for Display {}
-
 
 /// Enum for display orientation
 #[repr(u8)]
@@ -290,14 +350,13 @@ impl From<DEVMODE_DISPLAY_ORIENTATION> for DisplayOrientation {
 impl From<DisplayOrientation> for DEVMODE_DISPLAY_ORIENTATION {
     fn from(i: DisplayOrientation) -> Self {
         match i {
-            DisplayOrientation::NoRotation => { DMDO_DEFAULT }
-            DisplayOrientation::Rotate90 => { DMDO_90 }
-            DisplayOrientation::Rotate180 => { DMDO_180 }
-            DisplayOrientation::Rotate270 => { DMDO_270 }
+            DisplayOrientation::NoRotation => DMDO_DEFAULT,
+            DisplayOrientation::Rotate90 => DMDO_90,
+            DisplayOrientation::Rotate180 => DMDO_180,
+            DisplayOrientation::Rotate270 => DMDO_270,
         }
     }
 }
-
 
 #[repr(C)]
 #[derive(Clone, Default, Debug)]
@@ -326,7 +385,6 @@ pub struct DisplayMode {
     /// represented as 16 bit in windows)
     pub hdr: bool,
 }
-
 
 /// used to receive sync signal with vsync. this is a async stream.
 /// it receives signal after every frame.
@@ -407,7 +465,10 @@ impl Stream for DisplayVSyncStream {
                 panic!("DisplayVSyncStream sync thread quit unexpectedly.")
             }
             Ok(Err(e)) => {
-                error!("DisplayVSyncStream received a sync error. Maybe monitor disconnected? {:?}", e);
+                error!(
+                    "DisplayVSyncStream received a sync error. Maybe monitor disconnected? {:?}",
+                    e
+                );
                 out = Poll::Ready(None);
             }
             Ok(Ok(())) => {

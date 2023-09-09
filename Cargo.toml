@@ -35,10 +35,10 @@ env_logger = "0.10.0"
 
 [dependencies]
 futures = "0.3.28"
-log = "0.4.17"
+log = "0.4.20"
 
 [dependencies.tokio]
-version = "1.28.1"
+version = "1.32.0"
 features = [
     "rt",
     "time",
@@ -46,7 +46,7 @@ features = [
 ]
 
 [dependencies.windows]
-version = "0.48.0"
+version = "0.51.1"
 features = [
     "Win32_Foundation",
     "Win32_Graphics_Direct3D11",

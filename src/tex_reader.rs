@@ -3,20 +3,23 @@
 
 #[cfg(test)]
 mod test {
-    use std::sync::Once;
-    use std::time::Duration;
-    use futures::{select, FutureExt};
-    use log::LevelFilter::Debug;
-    use tokio::time::interval;
-    use crate::{co_init, DesktopDuplicationApi, set_process_dpi_awareness};
     use crate::devices::AdapterFactory;
     use crate::tex_reader::TextureReader;
+    use crate::{co_init, set_process_dpi_awareness, DesktopDuplicationApi};
+    use futures::{select, FutureExt};
+    use log::LevelFilter::Debug;
+    use std::sync::Once;
+    use std::time::Duration;
+    use tokio::time::interval;
 
     static INIT: Once = Once::new();
 
     pub fn initialize() {
         INIT.call_once(|| {
-            let _ = env_logger::builder().is_test(true).filter_level(Debug).try_init();
+            let _ = env_logger::builder()
+                .is_test(true)
+                .filter_level(Debug)
+                .try_init();
         });
     }
 
@@ -25,7 +28,10 @@ mod test {
         initialize();
 
         let rt = tokio::runtime::Builder::new_current_thread()
-            .thread_name("graphics_thread".to_owned()).enable_time().build().unwrap();
+            .thread_name("graphics_thread".to_owned())
+            .enable_time()
+            .build()
+            .unwrap();
 
         rt.block_on(async {
             set_process_dpi_awareness();
@@ -56,9 +62,9 @@ mod test {
                                 for j in 0..12{
                                     print!("{}\t",data[pitch*(i+1)-(12-(j))]);
                                 }
-                                print!("\n");
+                                println!();
                             }
-                            print!("\n");
+                            println!();
                             counter += 1;
                         };
                     },
@@ -70,18 +76,19 @@ mod test {
                             break;
                         }
                     }
-                }
-                ;
-            };
+                };
+            }
         });
     }
 }
 
-use std::ptr::copy;
-use windows::Win32::Graphics::Direct3D11::{D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_USAGE_STAGING, ID3D11Device4, ID3D11DeviceContext4};
 use crate::texture::{ColorFormat, Texture};
 use crate::{DDApiError, Result};
-
+use std::ptr::copy;
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device4, ID3D11DeviceContext4, D3D11_CPU_ACCESS_READ, D3D11_MAPPED_SUBRESOURCE,
+    D3D11_MAP_READ, D3D11_USAGE_STAGING,
+};
 
 /// Tool for reading GPU only directx textures.
 ///
@@ -126,13 +133,22 @@ impl TextureReader {
     /// retrieve data from texture and store it in vector
     pub fn get_data(&mut self, vec: &mut Vec<u8>, tex: &Texture) -> Result<()> {
         self.ensure_shape(tex)?;
-        unsafe { self.ctx.CopyResource(self.tex.as_mut().unwrap().as_raw_ref(), tex.as_raw_ref()); }
+        unsafe {
+            self.ctx
+                .CopyResource(self.tex.as_mut().unwrap().as_raw_ref(), tex.as_raw_ref());
+        }
         unsafe { self.ctx.Flush() }
         let raw_tex = self.tex.as_mut().unwrap().as_raw_ref();
         let mut sub_res = D3D11_MAPPED_SUBRESOURCE::default();
-        let result = unsafe { self.ctx.Map(raw_tex, 0, D3D11_MAP_READ, 0, Some(&mut sub_res)) };
+        let result = unsafe {
+            self.ctx
+                .Map(raw_tex, 0, D3D11_MAP_READ, 0, Some(&mut sub_res))
+        };
         if result.is_err() {
-            return Err(DDApiError::Unexpected(format!("failed to map to cpu {:?}", result)));
+            return Err(DDApiError::Unexpected(format!(
+                "failed to map to cpu {:?}",
+                result
+            )));
         }
 
         let desc = tex.desc();
@@ -142,27 +158,47 @@ impl TextureReader {
                 let total_size = desc.width * desc.height * 4;
                 vec.resize(total_size as usize, 0);
                 for i in 0..desc.height {
-                    unsafe { copy(sub_res.pData.add((i * sub_res.RowPitch) as usize) as *const u8, vec.as_mut_ptr().add((i * desc.width * 4) as _), (desc.width * 4) as usize); }
+                    unsafe {
+                        copy(
+                            sub_res.pData.add((i * sub_res.RowPitch) as usize) as *const u8,
+                            vec.as_mut_ptr().add((i * desc.width * 4) as _),
+                            (desc.width * 4) as usize,
+                        );
+                    }
                 }
             }
             ColorFormat::YUV444 => {
                 let total_size = desc.width * desc.height * 3;
                 vec.resize(total_size as usize, 0);
-                for i in 0..(desc.height*3) {
-                    unsafe { copy(sub_res.pData.add((i * sub_res.RowPitch) as usize) as *const u8, vec.as_mut_ptr().add((i * desc.width) as _), (desc.width) as usize); }
+                for i in 0..(desc.height * 3) {
+                    unsafe {
+                        copy(
+                            sub_res.pData.add((i * sub_res.RowPitch) as usize) as *const u8,
+                            vec.as_mut_ptr().add((i * desc.width) as _),
+                            (desc.width) as usize,
+                        );
+                    }
                 }
             }
             ColorFormat::NV12 => {
                 let total_size = desc.width * desc.height * 3 / 2;
                 vec.resize(total_size as usize, 0);
                 for i in 0..(3 * desc.height / 2) {
-                    unsafe { copy(sub_res.pData.add((i * sub_res.RowPitch) as usize) as *const u8, vec.as_mut_ptr().add((i * desc.width) as _), (desc.width) as usize); }
+                    unsafe {
+                        copy(
+                            sub_res.pData.add((i * sub_res.RowPitch) as usize) as *const u8,
+                            vec.as_mut_ptr().add((i * desc.width) as _),
+                            (desc.width) as usize,
+                        );
+                    }
                 }
             }
 
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
-        unsafe { self.ctx.Unmap(raw_tex, 0); }
+        unsafe {
+            self.ctx.Unmap(raw_tex, 0);
+        }
 
         Ok(())
     }
@@ -174,13 +210,16 @@ impl TextureReader {
             unsafe { tex.as_raw_ref().GetDesc(&mut desc) };
             desc.Usage = D3D11_USAGE_STAGING;
             desc.BindFlags = Default::default();
-            desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as u32;
             desc.MiscFlags = Default::default();
 
             let mut new_tex = None;
             let result = unsafe { self.device.CreateTexture2D(&desc, None, Some(&mut new_tex)) };
             if result.is_err() {
-                return Err(DDApiError::Unexpected(format!("failed to create texture. {:?}", new_tex)));
+                return Err(DDApiError::Unexpected(format!(
+                    "failed to create texture. {:?}",
+                    new_tex
+                )));
             }
             self.tex = Some(Texture::new(new_tex.unwrap()))
         }
