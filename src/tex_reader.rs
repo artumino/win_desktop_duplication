@@ -1,16 +1,28 @@
 //! Provides convenient tools for handling directx textures. [`TextureReader`][TextureReader] can be used to read
 //! textures.
 
+use std::ptr::copy;
+
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device4, ID3D11DeviceContext4, D3D11_CPU_ACCESS_READ, D3D11_MAPPED_SUBRESOURCE,
+    D3D11_MAP_READ, D3D11_USAGE_STAGING,
+};
+
+use crate::texture::{ColorFormat, Texture};
+use crate::{DDApiError, Result};
+
 #[cfg(test)]
 mod test {
-    use crate::devices::AdapterFactory;
-    use crate::tex_reader::TextureReader;
-    use crate::{co_init, set_process_dpi_awareness, DesktopDuplicationApi};
+
     use futures::{select, FutureExt};
     use log::LevelFilter::Debug;
     use std::sync::Once;
     use std::time::Duration;
     use tokio::time::interval;
+
+    use crate::devices::AdapterFactory;
+    use crate::tex_reader::TextureReader;
+    use crate::{co_init, set_process_dpi_awareness, DesktopDuplicationApi};
 
     static INIT: Once = Once::new();
 
@@ -82,14 +94,6 @@ mod test {
     }
 }
 
-use crate::texture::{ColorFormat, Texture};
-use crate::{DDApiError, Result};
-use std::ptr::copy;
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Device4, ID3D11DeviceContext4, D3D11_CPU_ACCESS_READ, D3D11_MAPPED_SUBRESOURCE,
-    D3D11_MAP_READ, D3D11_USAGE_STAGING,
-};
-
 /// Tool for reading GPU only directx textures.
 ///
 /// # Example usage
@@ -140,17 +144,15 @@ impl TextureReader {
         unsafe { self.ctx.Flush() }
         let raw_tex = self.tex.as_mut().unwrap().as_raw_ref();
         let mut sub_res = D3D11_MAPPED_SUBRESOURCE::default();
-        let result = unsafe {
+        if let Err(e) = unsafe {
             self.ctx
                 .Map(raw_tex, 0, D3D11_MAP_READ, 0, Some(&mut sub_res))
-        };
-        if result.is_err() {
+        } {
             return Err(DDApiError::Unexpected(format!(
                 "failed to map to cpu {:?}",
-                result
+                e
             )));
         }
-
         let desc = tex.desc();
 
         match desc.format {
@@ -210,15 +212,16 @@ impl TextureReader {
             unsafe { tex.as_raw_ref().GetDesc(&mut desc) };
             desc.Usage = D3D11_USAGE_STAGING;
             desc.BindFlags = Default::default();
-            desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as u32;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as _;
             desc.MiscFlags = Default::default();
 
             let mut new_tex = None;
-            let result = unsafe { self.device.CreateTexture2D(&desc, None, Some(&mut new_tex)) };
-            if result.is_err() {
+
+            if let Err(e) = unsafe { self.device.CreateTexture2D(&desc, None, Some(&mut new_tex)) }
+            {
                 return Err(DDApiError::Unexpected(format!(
                     "failed to create texture. {:?}",
-                    new_tex
+                    e
                 )));
             }
             self.tex = Some(Texture::new(new_tex.unwrap()))

@@ -1,11 +1,11 @@
 //! This module contains [adapter (GPU)][Adapter] and [adapter factories][AdapterFactory] to acquire adapters.
 //! The adapters can be used to enumerate various outputs connected to them.
 
-use windows::core::{ComInterface, Result as WinResult};
+use windows::core::{Interface, Result as WinResult};
 use windows::Win32::Foundation::LUID;
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory2, IDXGIAdapter4, IDXGIFactory6, DXGI_ADAPTER_DESC3,
-    DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+    DXGI_CREATE_FACTORY_FLAGS, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
 };
 
 use crate::outputs::Display;
@@ -51,15 +51,13 @@ unsafe impl Sync for Adapter {}
 impl Adapter {
     /// Returns name of the adapter
     pub fn name(&self) -> String {
-        let mut desc = DXGI_ADAPTER_DESC3::default();
-        unsafe { self.0.GetDesc3(&mut desc) }.unwrap();
+        let desc: DXGI_ADAPTER_DESC3 = unsafe { self.0.GetDesc3().unwrap() };
         convert_u16_to_string(&desc.Description)
     }
 
     /// returns LUID of the Adapter.
     pub fn luid(&self) -> LUID {
-        let mut desc = DXGI_ADAPTER_DESC3::default();
-        unsafe { self.0.GetDesc3(&mut desc) }.unwrap();
+        let desc: DXGI_ADAPTER_DESC3 = unsafe { self.0.GetDesc3().unwrap() };
         desc.AdapterLuid
     }
 
@@ -177,7 +175,8 @@ impl AdapterFactory {
     /// Create new instance of AdapterFactory
     pub fn new() -> Self {
         unsafe {
-            let dxgi_factory: IDXGIFactory6 = CreateDXGIFactory2(0).unwrap();
+            let dxgi_factory: IDXGIFactory6 =
+                CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS::default()).unwrap();
             Self {
                 fac: dxgi_factory,
                 count: 0,
